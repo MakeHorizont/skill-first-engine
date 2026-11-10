@@ -62,17 +62,18 @@ DEFAULT_DOMAINS: dict[str, dict[str, str]] = {
 # Точные сопоставления известных имен скиллов с доменами
 EXACT_SKILL_DOMAINS: dict[str, str] = {
     # System
+    "complex-systems-engineering": "system",
     "cybersyn": "system",
-    "dialectical-engineering": "system",
-    "dialectical-media-systems": "system",
     "doctor": "system",
-    "hegel-dialectics": "system",
-    "marx-capital": "system",
+    "domain-monorepo": "system",
+    "dynamic-systems-logic": "system",
+    "economic-systems-audit": "system",
+    "enterprise-semantic-shield": "system",
     "ogas": "system",
+    "platform-systems-audit": "system",
     "security-sentinel": "system",
     "skill-first-engine": "system",
     "tda-architecture": "system",
-    "domain-monorepo": "system",
     # Engineering
     "agent-deep-links": "engineering",
     "ast-grep": "engineering",
