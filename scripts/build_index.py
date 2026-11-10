@@ -64,6 +64,7 @@ EXACT_SKILL_DOMAINS: dict[str, str] = {
     # System
     "cybersyn": "system",
     "dialectical-engineering": "system",
+    "dialectical-media-systems": "system",
     "doctor": "system",
     "hegel-dialectics": "system",
     "marx-capital": "system",
