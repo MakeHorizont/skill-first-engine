@@ -119,7 +119,8 @@ skill-first-engine/
 |   |-- build_index.py       # 分面目录构建器与两级索引生成器
 |   |-- git_skill_sync.py    # Git事务同步与反压控制脚本
 |   |-- curate_skills.py     # 记忆卫生审计器 (修剪与整合工具)
-|   `-- loop_runner.py       # Ralph外循环控制器与Meta死锁检测器
+|   |-- eval_harness.py      # 快速诊断基准 (harness-bench-fast 与 agentskills.io)
+|   `-- loop_runner.py       # 自动化 Ralph 循环 / AutoResearch 与 Meta 死锁控制器
 |-- templates/
 |   |-- SKILL_TEMPLATE.md    # 技能模板 (EN / RU / ZH)
 |   |-- STATE_TEMPLATE.md    # Ralph循环状态模板 (EN / RU / ZH)
@@ -164,7 +165,14 @@ python scripts/loop_runner.py \
   --work-dir /path/to/project \
   --hypothesis "添加索引以优化检索性能" \
   --test-cmd "pytest tests/benchmarks" \
-  --new-metric "142 ops/sec"
+  --new-metric "142 ops/sec" \
+  --direction higher
+```
+
+### 5. 运行快速诊断基准 (Harness-Bench-Fast)
+```bash
+# 诊断单个技能或整个技能仓库
+python scripts/eval_harness.py path/to/skills
 ```
 
 ---

@@ -119,7 +119,8 @@ skill-first-engine/
 |   |-- build_index.py       # Построитель фасетного каталога и генератор INDEX.md
 |   |-- git_skill_sync.py    # Транзакционный Git-контроллер с контуром backpressure
 |   |-- curate_skills.py     # Инструмент аудита и гигиены памяти (прунинг и объединение)
-|   `-- loop_runner.py       # Контроллер Ralph Loop и детектор смены парадигмы Meta Loop
+|   |-- eval_harness.py      # Экспресс-бенчмарк харнесса (harness-bench-fast и agentskills.io)
+|   `-- loop_runner.py       # Автономный контроллер Ralph Loop / AutoResearch и Meta Loop
 |-- templates/
 |   |-- SKILL_TEMPLATE.md    # Шаблоны паспорта скилла (EN / RU / ZH)
 |   |-- STATE_TEMPLATE.md    # Шаблоны состояния внешнего цикла (EN / RU / ZH)
@@ -164,7 +165,14 @@ python scripts/loop_runner.py \
   --work-dir /path/to/project \
   --hypothesis "Добавление индекса для ускорения выборки" \
   --test-cmd "pytest tests/benchmarks" \
-  --new-metric "142 ops/sec"
+  --new-metric "142 ops/sec" \
+  --direction higher
+```
+
+### 5. Экспресс-бенчмарк соответствия харнессу (Harness-Bench-Fast)
+```bash
+# Диагностика одного скилла или всего репозитория
+python scripts/eval_harness.py path/to/skills
 ```
 
 ---

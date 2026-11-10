@@ -119,7 +119,8 @@ skill-first-engine/
 |   |-- build_index.py       # Faceted catalog builder & 2-level index generator
 |   |-- git_skill_sync.py    # Transactional Git sync & backpressure controller
 |   |-- curate_skills.py     # Memory hygiene auditor (pruning & consolidation)
-|   `-- loop_runner.py       # Ralph Loop controller & Meta Loop trigger
+|   |-- eval_harness.py      # Diagnostic fast-benchmark (harness-bench-fast & agentskills.io)
+|   `-- loop_runner.py       # AutoResearch / Ralph Loop & Meta Loop controller
 |-- templates/
 |   |-- SKILL_TEMPLATE.md    # Scaffolds for new skills (EN / RU / ZH)
 |   |-- STATE_TEMPLATE.md    # Ralph Loop state files (EN / RU / ZH)
@@ -164,7 +165,14 @@ python scripts/loop_runner.py \
   --work-dir /path/to/project \
   --hypothesis "Add index to lookup column" \
   --test-cmd "pytest tests/benchmarks" \
-  --new-metric "142 ops/sec"
+  --new-metric "142 ops/sec" \
+  --direction higher
+```
+
+### 5. Run Fast Diagnostic Benchmark (Harness-Bench-Fast)
+```bash
+# Benchmark single skill or entire repository
+python scripts/eval_harness.py path/to/skills
 ```
 
 ---

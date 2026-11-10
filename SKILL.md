@@ -1,6 +1,6 @@
 ---
 name: skill-first-engine
-description: "Git-based Skill-First memory architecture and multi-tier loop engine for AI agents (Skill-First & Loop Engine). Replaces fragile RAG vector databases with version-controlled Git skill repositories, strict transactional sync with backpressure, top 30% smart zone context management, Ralph Loop benchmark iteration, and Meta Loop anti-collapse restarts."
+description: "Git-based Skill-First memory architecture and multi-tier loop engine for AI agents. Replaces fragile RAG with version-controlled Git skill repositories, strict transactional sync with backpressure, top 30% smart zone context management, Ralph Loop benchmark iteration, and Meta Loop anti-collapse restarts."
 ---
 
 # GIT-BASED SKILL-FIRST MEMORY ARCHITECTURE & LOOP ENGINE (SKILL-FIRST & LOOP ENGINE)

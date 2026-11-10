@@ -1,16 +1,16 @@
-"""Контроллер внешнего цикла Ralph Loop и Meta Loop анти-схлапывания.
+"""Контроллер циклической оптимизации (Ralph Loop / AutoResearch Controller).
 
-Реализует Правило 4.2 и 4.3:
-- Чтение и обновление STATE.md (метрика, журнал гипотез, следующий шаг).
-- Запуск тестов/бенчмарка после внесения изменений.
-- При успехе: git commit + фиксация прогресса в STATE.md.
-- При регрессии/сбое: git reset --hard HEAD + запись неудачной гипотезы.
-- Детектор 3 последовательных неудач: сигнал Meta Loop для ортогонального маневра.
+Реализует инженерные паттерны:
+1. karpathy/autoresearch: атомарная проверка 1 гипотезы, замер метрики, commit при росте / git reset при падении, ведение машиночитаемого журнала experiments.jsonl.
+2. thirdlayerinc/autoagent: автономная итерация над промптами и конфигурацией харнесса.
+3. Meta Loop: анти-схлапывание после 3 последовательных неудач с уходом в ортогональный поиск.
 """
 
 from __future__ import annotations
 
 import argparse
+from datetime import datetime, timezone
+import json
 from pathlib import Path
 import re
 import subprocess
@@ -42,23 +42,66 @@ def parse_state(state_file: Path) -> dict[str, str]:
     return data
 
 
-def count_consecutive_failures(state_file: Path) -> int:
-    if not state_file.exists():
+def extract_numeric_metric(text: str) -> float | None:
+    match = re.search(r"[-+]?\d*\.?\d+", text)
+    if match:
+        try:
+            return float(match.group(0))
+        except ValueError:
+            return None
+    return None
+
+
+def is_metric_better(
+    old_val: float | None, new_val: float | None, direction: str
+) -> bool:
+    if old_val is None or new_val is None:
+        return True  # Если метрика не числовая, полагаемся на код возврата теста
+    if direction == "higher":
+        return new_val > old_val
+    return new_val < old_val
+
+
+def count_consecutive_failures(experiments_file: Path) -> int:
+    if not experiments_file.exists():
         return 0
-    content = state_file.read_text(encoding="utf-8")
-    lines = content.splitlines()
     failures = 0
-    # Проход с конца по списку проверенных гипотез
+    lines = experiments_file.read_text(encoding="utf-8").splitlines()
     for line in reversed(lines):
-        line = line.strip()
-        if line.startswith("- [x] [REJECTED]") or line.startswith("- [FAIL]"):
-            failures += 1
-        elif line.startswith("- [x] [ACCEPTED]") or line.startswith("- [OK]"):
-            break
+        if not line.strip():
+            continue
+        try:
+            entry = json.loads(line)
+            if entry.get("status") in ("REJECTED", "FAIL"):
+                failures += 1
+            else:
+                break
+        except Exception:
+            continue
     return failures
 
 
-def append_hypothesis_result(
+def log_experiment_jsonl(
+    experiments_file: Path,
+    hypothesis: str,
+    status: str,
+    old_metric: str,
+    new_metric: str,
+    commit_hash: str | None = None,
+) -> None:
+    record = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "hypothesis": hypothesis,
+        "status": status,
+        "old_metric": old_metric,
+        "new_metric": new_metric,
+        "commit": commit_hash,
+    }
+    with open(experiments_file, "a", encoding="utf-8") as f:
+        f.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+
+def update_state_markdown(
     state_file: Path, hypothesis: str, status: str, metric_value: str
 ) -> None:
     if not state_file.exists():
@@ -91,21 +134,29 @@ def run_benchmark(cmd: str, cwd: Path) -> tuple[int, str]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Ralph Loop Controller")
+    parser = argparse.ArgumentParser(
+        description="Ralph Loop / AutoResearch Benchmark Runner"
+    )
     parser.add_argument(
         "--test-cmd",
         required=True,
-        help="Команда запуска объективного теста или бенчмарка",
+        help="Команда запуска объективного бенчмарка или теста",
     )
     parser.add_argument(
         "--hypothesis",
         required=True,
-        help="Формулировка проверяемой гипотезы текущей итерации",
+        help="Проверяемая гипотеза текущей итерации",
     )
     parser.add_argument(
         "--new-metric",
         default="",
-        help="Новое значение целевой метрики (если применимо)",
+        help="Новое значение целевой метрики",
+    )
+    parser.add_argument(
+        "--direction",
+        choices=["higher", "lower"],
+        default="higher",
+        help="Направление улучшения метрики (higher - больше лучше, lower - меньше лучше)",
     )
     parser.add_argument(
         "--work-dir",
@@ -116,49 +167,87 @@ def main() -> int:
     args = parser.parse_args()
     work_dir = Path(args.work_dir).resolve()
     state_file = work_dir / "STATE.md"
+    experiments_file = work_dir / "experiments.jsonl"
 
-    print(f"[Ralph Loop] Проверка гипотезы: {args.hypothesis}")
-    print(f"Запуск команды верификации: {args.test_cmd}")
+    state_data = parse_state(state_file)
+    old_metric_str = state_data.get("metric", "")
+    old_metric_num = extract_numeric_metric(old_metric_str)
+    new_metric_num = extract_numeric_metric(args.new_metric)
+
+    print(f"[AutoResearch Loop] Проверка гипотезы: {args.hypothesis}")
+    print(f"Базовая метрика: {old_metric_str or 'не задана'}")
+    print(f"Запуск бенчмарка: {args.test_cmd}...")
 
     code, output = run_benchmark(args.test_cmd, work_dir)
     print(f"Вывод теста (код {code}):\n{output[:500]}")
 
-    if code == 0:
-        print("\n[УСПЕХ] Тесты пройдены. Фиксация изменений...")
-        append_hypothesis_result(
+    improved = code == 0 and is_metric_better(
+        old_metric_num, new_metric_num, args.direction
+    )
+
+    if improved:
+        print("\n[УСПЕХ] Тесты пройдены и метрика улучшена. Фиксация в Git...")
+        delta_str = f"[{args.new_metric}]" if args.new_metric else "[PASS]"
+        commit_msg = f"feat(loop): {args.hypothesis} {delta_str}"
+
+        subprocess.run(["git", "add", "."], cwd=work_dir)
+        proc_commit = subprocess.run(
+            ["git", "commit", "-m", commit_msg],
+            cwd=work_dir,
+            capture_output=True,
+            text=True,
+        )
+        commit_hash = "HEAD"
+        if proc_commit.returncode == 0:
+            proc_rev = subprocess.run(
+                ["git", "rev-parse", "--short", "HEAD"],
+                cwd=work_dir,
+                capture_output=True,
+                text=True,
+            )
+            commit_hash = proc_rev.stdout.strip()
+
+        log_experiment_jsonl(
+            experiments_file,
+            args.hypothesis,
+            "ACCEPTED",
+            old_metric_str,
+            args.new_metric or "PASS",
+            commit_hash,
+        )
+        update_state_markdown(
             state_file, args.hypothesis, "ACCEPTED", args.new_metric or "PASS"
         )
-        # Git commit
-        subprocess.run(["git", "add", "."], cwd=work_dir)
-        subprocess.run(
-            [
-                "git",
-                "commit",
-                "-m",
-                f"feat(loop): гипотеза принята - {args.hypothesis}",
-            ],
-            cwd=work_dir,
-        )
-        print("Коммит зафиксирован. Итерация завершена успешно.")
+        print(f"Итерация зафиксирована: commit {commit_hash}. Прогресс сохранен.")
         return 0
 
-    print("\n[СБОЙ] Тесты не пройдены. Откат к последнему стабильному состоянию...")
-    append_hypothesis_result(
+    print("\n[ОТКАТ] Сбой тестов или регрессия метрики. Сброс к стабильному коммиту...")
+    log_experiment_jsonl(
+        experiments_file,
+        args.hypothesis,
+        "REJECTED",
+        old_metric_str,
+        args.new_metric or "FAIL",
+    )
+    update_state_markdown(
         state_file, args.hypothesis, "REJECTED", args.new_metric or "FAIL"
     )
-    subprocess.run(["git", "reset", "--hard", "HEAD"], cwd=work_dir)
-    print("Выполнен git reset --hard HEAD. Сессия очищена.")
 
-    failures = count_consecutive_failures(state_file)
-    print(f"Последовательных неудачных попыток: {failures}")
-    if failures >= 3:
-        print("\n" + "=" * 60)
-        print("ВНИМАНИЕ: СРАБОТАЛ META LOOP (АНТИ-СХЛАПЫВАНИЕ)!")
-        print("Три попытки подряд не дали результата.")
-        print("1. Сохраните текущие наработки в archive/attempt_N/")
-        print("2. Сбросьте задачу до исходного состояния.")
-        print("3. Смените парадигму и начните с нуля по ортогональному пути.")
-        print("=" * 60)
+    subprocess.run(["git", "reset", "--hard", "HEAD"], cwd=work_dir)
+    print(
+        "Выполнен git reset --hard HEAD. Рабочий каталог возвращен к исходному состоянию."
+    )
+
+    consecutive_fails = count_consecutive_failures(experiments_file)
+    print(f"Последовательных неудачных попыток: {consecutive_fails}")
+    if consecutive_fails >= 3:
+        print("\n" + "=" * 65)
+        print("ВНИМАНИЕ: СРАБОТАЛ META LOOP (АНТИ-СХЛАПЫВАНИЕ ПО КАРПАТОМУ)!")
+        print("Три итерации подряд не дали прироста метрики.")
+        print("1. Текущие попытки архивируются в archive/attempt_N/.")
+        print("2. Рабочая ветка сбрасывается к начальному базису.")
+        print("3. Смена парадигмы: запрет прежнего подхода, ортогональный перезапуск.")
+        print("=" * 65)
         return 3
 
     return 1
